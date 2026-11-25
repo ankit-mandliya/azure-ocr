@@ -1,0 +1,23 @@
+services:
+  contacthub-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: contacthub-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=ContactHub
+      - APP_ENV=production
+      - JSON_STORAGE_PATH=/app/data/contacts.json
+      - MAX_UPLOAD_MB=10
+      - OCR_DEVICE=cpu
+      - OCR_DEFAULT_PROFILE=latin
+      - OCR_ENABLE_PREPROCESSING=true
+    volumes:
+      - contacthub_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  contacthub_data:
+

@@ -1,0 +1,6 @@
+# OCR runtime dependencies
+# In deployment, select CPU or GPU wheel as appropriate for your platform:
+# e.g., paddlepaddle-gpu for CUDA-enabled servers
+paddlepaddle>=2.6.0
+paddleocr>=2.7.0
+opencv-python-headless>=4.9.0
