@@ -69,6 +69,99 @@ def _list_schema(values: Iterable[tuple[str | None, float | None]]) -> list[dict
     ]
 
 
+def _address_component(value_address: Any, *names: str) -> str | None:
+    if value_address is None:
+        return None
+    for name in names:
+        value = None
+        if isinstance(value_address, dict):
+            value = value_address.get(name)
+            if value is None:
+                # Accept Azure REST-style camelCase names as well as SDK JSON names.
+                camel_name = name
+                if "_" in name:
+                    parts = name.split("_")
+                    camel_name = parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+                value = value_address.get(camel_name)
+        else:
+            value = getattr(value_address, name, None)
+        if value is not None:
+            value = str(value).strip()
+            if value:
+                return value
+    return None
+
+
+def _address_items(field: Any) -> list[Any]:
+    if field is None:
+        return []
+    if isinstance(field, (list, tuple)):
+        return list(field)
+    if isinstance(field, dict):
+        values = field.get("valueArray")
+        if values is None:
+            values = field.get("values")
+        if values is None:
+            values = field.get("value")
+        if isinstance(values, (list, tuple)):
+            return list(values)
+        if values is not None:
+            return [values]
+        return [field]
+
+    values = getattr(field, "values", None)
+    if values is None:
+        values = getattr(field, "value", None)
+    if isinstance(values, (list, tuple)):
+        return list(values)
+    if values is not None:
+        return [values]
+    return [field]
+
+
+def _address_value(item: Any) -> tuple[str | None, float | None]:
+    if isinstance(item, dict):
+        content = item.get("content")
+        confidence = item.get("confidence")
+        value_address = item.get("valueAddress")
+    else:
+        content = getattr(item, "content", None)
+        confidence = getattr(item, "confidence", None)
+        value_address = getattr(item, "valueAddress", None)
+        if value_address is None:
+            value_address = getattr(item, "value_address", None)
+        if value_address is None:
+            value_address = getattr(item, "value", None)
+
+    if not isinstance(content, str):
+        content = getattr(content, "content", None) if content is not None else None
+    content = str(content).strip() if content else None
+
+    street_address = _address_component(
+        value_address,
+        "streetAddress",
+        "street_address",
+    )
+    level = _address_component(value_address, "level")
+
+    # Preserve the original OCR text exactly. Only use structured components
+    # when it is absent or clearly incomplete.
+    value = content
+    if not value:
+        value = street_address
+    if not value:
+        components = [
+            _address_component(value_address, "houseNumber", "house_number"),
+            _address_component(value_address, "road"),
+        ]
+        value = " ".join(component for component in components if component)
+    if value and level and level.lower() not in value.lower():
+        value = f"{value} {level}"
+
+    confidence = float(confidence) if confidence is not None else None
+    return (value or None), confidence
+
+
 def map_document(document: Any) -> dict[str, Any]:
     fields = _field(document, "fields") or {}
 
@@ -131,7 +224,7 @@ def map_document(document: Any) -> dict[str, Any]:
     fax = _values(get_field("Faxes"))
     if not fax:
         fax = _values(get_field("FaxNumbers"))
-    addresses = _values(get_field("Addresses"))
+    addresses = [_address_value(item) for item in _address_items(get_field("Addresses"))]
 
     all_confidences = [
         confidence

@@ -99,6 +99,59 @@ def test_mapper_unwraps_azure_sdk_list_fields():
     assert mapped["job_title"] == "Chief Executive Officer"
 
 
+def test_mapper_preserves_address_content_and_confidence():
+    document = {
+        "fields": {
+            "Addresses": {
+                "type": "array",
+                "valueArray": [{
+                    "type": "address",
+                    "content": "111 Section A,Be étage",
+                    "confidence": 0.791,
+                    "valueAddress": {
+                        "houseNumber": "111",
+                        "road": "Section A,Be",
+                        "streetAddress": "111 Section A,Be",
+                        "level": "étage",
+                    },
+                }],
+            },
+        },
+    }
+
+    mapped = map_document(document)
+
+    assert mapped["addresses"] == [{
+        "value": "111 Section A,Be étage",
+        "confidence": 0.791,
+    }]
+
+
+def test_mapper_builds_address_from_components_when_content_is_missing():
+    address = DocumentField(
+        value_type="address",
+        value={
+            "houseNumber": "42",
+            "road": "Market Road",
+        },
+        confidence=0.88,
+    )
+    document = {
+        "fields": {
+            "Addresses": DocumentField(
+                value_type="list",
+                value=[address],
+                confidence=0.88,
+            ),
+        },
+    }
+
+    mapped = map_document(document)
+
+    assert mapped["addresses"][0]["value"] == "42 Market Road"
+    assert mapped["addresses"][0]["confidence"] == 0.88
+
+
 def test_mocked_extraction_and_save(tmp_path, monkeypatch):
     storage = JsonContactStorage(tmp_path / "azure_contacts.json")
     app.dependency_overrides[get_storage] = lambda: storage
